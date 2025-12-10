@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { calculateWinner, isBoardFull } from './utils/gameLogic';
 import { getAiMove } from './services/geminiService';
-import { Player, SquareValue, GameMode, ScoreBoard } from './types';
+import { Player, SquareValue, GameMode, ScoreBoard, Difficulty } from './types';
 import { UserIcon, CpuChipIcon, SparklesIcon, XIcon, OIcon, ArrowPathIcon, HomeIcon } from './components/Icons';
 
 function App() {
   const [gameMode, setGameMode] = useState<GameMode>(null);
+  const [difficulty, setDifficulty] = useState<Difficulty>('Hard');
   const [board, setBoard] = useState<SquareValue[]>(Array(9).fill(null));
   const [xIsNext, setXIsNext] = useState<boolean>(true);
   const [startingPlayer, setStartingPlayer] = useState<Player>('X'); // Track who started the current game
@@ -17,8 +18,6 @@ function App() {
 
   const currentPlayer = xIsNext ? 'X' : 'O';
   const isGameOver = winner !== null;
-
-  // Sound effects (simple oscillator beeps could be added here, but sticking to visual only for robustness)
 
   const handleSquareClick = useCallback((index: number) => {
     if (board[index] || winner || isAiThinking) return;
@@ -89,12 +88,12 @@ function App() {
         setIsAiThinking(true);
         
         try {
-          const { move, taunt } = await getAiMove(board, 'Hard');
+          // Pass the selected difficulty to the service
+          const { move, taunt } = await getAiMove(board, difficulty);
           if (taunt) setAiTaunt(taunt);
           if (board[move] === null) {
             makeMove(move, 'O');
           } else {
-            // Fallback for invalid move (rare with this logic but possible)
             console.error("AI tried to play on taken square");
           }
         } catch (e) {
@@ -105,7 +104,7 @@ function App() {
       };
       makeAiMove();
     }
-  }, [xIsNext, gameMode, winner, board]);
+  }, [xIsNext, gameMode, winner, board, difficulty]);
 
   const renderSquare = (i: number) => {
     const isWinningSquare = winningLine?.includes(i);
@@ -145,6 +144,25 @@ function App() {
           </div>
 
           <div className="grid gap-3 sm:gap-4">
+            
+            {/* Difficulty Selector */}
+            <div className="flex justify-center mb-1">
+              <div className="bg-gray-100 p-1 rounded-xl flex gap-1 relative">
+                <button
+                  onClick={() => setDifficulty('Easy')}
+                  className={`relative z-10 px-6 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${difficulty === 'Easy' ? 'bg-white text-gray-800 shadow-sm scale-105' : 'text-gray-400 hover:text-gray-600'}`}
+                >
+                  Easy
+                </button>
+                <button
+                  onClick={() => setDifficulty('Hard')}
+                  className={`relative z-10 px-6 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${difficulty === 'Hard' ? 'bg-white text-primary shadow-sm scale-105' : 'text-gray-400 hover:text-gray-600'}`}
+                >
+                  Hard
+                </button>
+              </div>
+            </div>
+
             <button
               onClick={() => setGameMode('PvAI')}
               className="group relative flex items-center justify-between p-4 sm:p-6 bg-gradient-to-r from-primary to-accent text-white rounded-2xl transition-all hover:shadow-lg hover:shadow-primary/30 hover:-translate-y-1"
@@ -155,7 +173,7 @@ function App() {
                 </div>
                 <div className="text-left">
                   <div className="font-semibold text-base sm:text-lg">Play vs Gemini</div>
-                  <div className="text-white/80 text-xs sm:text-sm">Challenge the AI</div>
+                  <div className="text-white/80 text-xs sm:text-sm">Difficulty: {difficulty}</div>
                 </div>
               </div>
               <SparklesIcon className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-300 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -199,8 +217,13 @@ function App() {
           >
             <HomeIcon className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
-          <div className="bg-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-full shadow-sm text-xs sm:text-sm font-medium text-gray-500">
-            {gameMode === 'PvAI' ? 'Human vs AI' : 'Human vs Human'}
+          <div className="bg-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-full shadow-sm text-xs sm:text-sm font-medium text-gray-500 flex items-center gap-2">
+            <span>{gameMode === 'PvAI' ? 'Human vs AI' : 'Human vs Human'}</span>
+            {gameMode === 'PvAI' && (
+               <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wide ${difficulty === 'Hard' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                 {difficulty}
+               </span>
+            )}
           </div>
           <button 
             onClick={() => resetGame()}
