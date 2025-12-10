@@ -5,7 +5,7 @@ import { getBestMove } from "../utils/gameLogic";
 const apiKey = process.env.API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
 
-// Define the schema for the AI's response
+// Define the schema for the AI's response (used for Easy/Hard)
 const moveSchema: Schema = {
   type: Type.OBJECT,
   properties: {
@@ -21,31 +21,68 @@ const moveSchema: Schema = {
   required: ["move"],
 };
 
+// Define schema for Taunt only (used for Impossible mode)
+const tauntSchema: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    taunt: {
+      type: Type.STRING,
+      description: "A short, arrogant, robotic comment about the perfect move you just made.",
+    },
+  },
+  required: ["taunt"],
+};
+
 export const getAiMove = async (board: SquareValue[], difficulty: Difficulty = 'Hard'): Promise<{ move: number; taunt?: string }> => {
-  // If no API Key is set, fallback to local logic (Minimax for Hard, Random for Easy)
+  // If no API Key is set, fallback to local logic
   if (!apiKey) {
     console.warn("No API Key found. Using local logic.");
-    
-    // Add a small artificial delay to simulate "thinking"
     await new Promise(resolve => setTimeout(resolve, 600));
-
     const move = getBestMove(board, 'O', difficulty);
-    
-    let taunt = "";
-    if (difficulty === 'Hard') {
-      const taunts = ["I don't need the cloud to beat you.", "Calculated locally.", "Checkmate in 3... maybe."];
-      taunt = taunts[Math.floor(Math.random() * taunts.length)];
-    } else {
-      taunt = "I'm just warming up.";
-    }
-
-    return { move, taunt };
+    const taunts = difficulty === 'Impossible' 
+      ? ["I cannot error.", "Resistance is futile.", "Mathematical perfection."] 
+      : ["Your move.", "Interesting choice.", "Thinking..."];
+    return { move, taunt: taunts[Math.floor(Math.random() * taunts.length)] };
   }
 
+  // IMPOSSIBLE MODE: Hybrid Approach
+  // Use Minimax for the move (100% perfect) and Gemini for the personality.
+  if (difficulty === 'Impossible') {
+    const move = getBestMove(board, 'O', 'Impossible');
+    
+    try {
+      const prompt = `
+        You are an unbeatable AI playing Tic-Tac-Toe. 
+        Board: ${JSON.stringify(board)}. 
+        You are making a move at index ${move} to ensure a win or draw.
+        Generate a short, arrogant, robotic taunt (max 12 words) telling the human they cannot win.
+        Example: "A perfect move. You cannot defeat math."
+      `;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: tauntSchema,
+        },
+      });
+      
+      const text = response.text;
+      const json = text ? JSON.parse(text) : { taunt: "Calculated." };
+      return { move, taunt: json.taunt };
+
+    } catch (e) {
+      console.error("Taunt generation failed", e);
+      return { move, taunt: "Optimal move executed." };
+    }
+  }
+
+  // EASY / HARD MODES: Full Gemini Control
   try {
     const strategy = difficulty === 'Hard' 
-      ? "You are an expert Tic-Tac-Toe player. You MUST win if possible, or block the opponent from winning. Do not make mistakes." 
-      : "You are a beginner player. You should play casually. Occasionally miss a block or a win to give the human a chance.";
+      ? "You are an expert player. Win if possible, block 'X' if they are about to win. Play aggressively." 
+      : "You are a beginner player. Play casually. Occasionally make a mistake or miss a block.";
 
     const prompt = `
       Play Tic-Tac-Toe as 'O'. Board (0-8): ${JSON.stringify(board)}.
@@ -60,7 +97,7 @@ export const getAiMove = async (board: SquareValue[], difficulty: Difficulty = '
       config: {
         responseMimeType: "application/json",
         responseSchema: moveSchema,
-        temperature: difficulty === 'Hard' ? 0.1 : 1.0, // Low temp for precision, high for variety/errors
+        temperature: difficulty === 'Hard' ? 0.2 : 1.2, 
         thinkingConfig: { thinkingBudget: 0 },
       },
     });
@@ -73,8 +110,8 @@ export const getAiMove = async (board: SquareValue[], difficulty: Difficulty = '
 
   } catch (error) {
     console.error("Error fetching AI move:", error);
-    // Fallback logic in case of API error
+    // Fallback
     const move = getBestMove(board, 'O', difficulty);
-    return { move, taunt: "My connection flickered, but I'm still here." };
+    return { move, taunt: "Connection interrupted. Playing locally." };
   }
 };

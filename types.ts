@@ -2,7 +2,7 @@ export type Player = 'X' | 'O';
 export type SquareValue = Player | null;
 
 export type GameMode = 'PvP' | 'PvAI' | null;
-export type Difficulty = 'Easy' | 'Hard';
+export type Difficulty = 'Easy' | 'Hard' | 'Impossible';
 
 export interface GameState {
   board: SquareValue[];

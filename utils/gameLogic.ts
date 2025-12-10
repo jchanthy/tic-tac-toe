@@ -25,13 +25,13 @@ export function isBoardFull(squares: SquareValue[]): boolean {
   return squares.every((square) => square !== null);
 }
 
-// Minimax Algorithm for Local "Hard" Mode
+// Minimax Algorithm for "Hard" and "Impossible" modes
 export function getBestMove(squares: SquareValue[], aiPlayer: Player, difficulty: Difficulty): number {
   const availableMoves = squares.map((val, idx) => val === null ? idx : null).filter((val) => val !== null) as number[];
   
   if (availableMoves.length === 0) return -1;
 
-  // Easy Mode: Mostly random, sometimes smart
+  // Easy Mode: Mostly random
   if (difficulty === 'Easy') {
     // 70% chance to pick a random available move
     if (Math.random() > 0.3) {
@@ -39,7 +39,7 @@ export function getBestMove(squares: SquareValue[], aiPlayer: Player, difficulty
     }
   }
 
-  // Hard Mode: Minimax (Perfect Play)
+  // Hard/Impossible Mode: Minimax (Perfect Play)
   // Optimization: If center is empty, take it (saves recursion depth and is usually best)
   if (squares[4] === null) return 4;
 

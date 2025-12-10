@@ -134,6 +134,12 @@ function App() {
     );
   };
 
+  const getDifficultyColor = (diff: Difficulty) => {
+    if (diff === 'Easy') return 'bg-green-100 text-green-700';
+    if (diff === 'Hard') return 'bg-yellow-100 text-yellow-700';
+    return 'bg-red-100 text-red-700';
+  }
+
   if (!gameMode) {
     return (
       <div className="h-[100dvh] w-full bg-gray-50 flex flex-col items-center justify-center p-4 overflow-hidden">
@@ -147,18 +153,24 @@ function App() {
             
             {/* Difficulty Selector */}
             <div className="flex justify-center mb-1">
-              <div className="bg-gray-100 p-1 rounded-xl flex gap-1 relative">
+              <div className="bg-gray-100 p-1 rounded-xl flex gap-1 relative items-center">
                 <button
                   onClick={() => setDifficulty('Easy')}
-                  className={`relative z-10 px-6 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${difficulty === 'Easy' ? 'bg-white text-gray-800 shadow-sm scale-105' : 'text-gray-400 hover:text-gray-600'}`}
+                  className={`relative z-10 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-300 ${difficulty === 'Easy' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
                 >
                   Easy
                 </button>
                 <button
                   onClick={() => setDifficulty('Hard')}
-                  className={`relative z-10 px-6 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${difficulty === 'Hard' ? 'bg-white text-primary shadow-sm scale-105' : 'text-gray-400 hover:text-gray-600'}`}
+                  className={`relative z-10 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-300 ${difficulty === 'Hard' ? 'bg-white text-primary shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
                 >
                   Hard
+                </button>
+                 <button
+                  onClick={() => setDifficulty('Impossible')}
+                  className={`relative z-10 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-300 ${difficulty === 'Impossible' ? 'bg-gray-800 text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                >
+                  Impossible
                 </button>
               </div>
             </div>
@@ -220,7 +232,7 @@ function App() {
           <div className="bg-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-full shadow-sm text-xs sm:text-sm font-medium text-gray-500 flex items-center gap-2">
             <span>{gameMode === 'PvAI' ? 'Human vs AI' : 'Human vs Human'}</span>
             {gameMode === 'PvAI' && (
-               <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wide ${difficulty === 'Hard' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+               <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wide ${getDifficultyColor(difficulty)}`}>
                  {difficulty}
                </span>
             )}
