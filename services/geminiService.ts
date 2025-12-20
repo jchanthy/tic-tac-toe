@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { SquareValue, Difficulty } from "../types";
+import { SquareValue, Difficulty, Player } from "../types";
 import { getBestMove } from "../utils/gameLogic";
 
 const moveSchema: Schema = {
@@ -28,11 +28,15 @@ const tauntSchema: Schema = {
   required: ["taunt"],
 };
 
-export const getAiMove = async (board: SquareValue[], difficulty: Difficulty = 'Hard'): Promise<{ move: number; taunt?: string }> => {
+export const getAiMove = async (
+  board: SquareValue[], 
+  difficulty: Difficulty = 'Hard', 
+  aiPlayer: Player = 'O'
+): Promise<{ move: number; taunt?: string }> => {
   const currentApiKey = process.env.API_KEY;
 
-  // Faster local move generation for all modes to act as "instant" fallback or move provider
-  const localMove = getBestMove(board, 'O', difficulty);
+  // Faster local move generation
+  const localMove = getBestMove(board, aiPlayer, difficulty);
 
   if (!currentApiKey) {
     return { move: localMove, taunt: "Offline Mode." };
@@ -40,17 +44,15 @@ export const getAiMove = async (board: SquareValue[], difficulty: Difficulty = '
 
   const ai = new GoogleGenAI({ apiKey: currentApiKey });
 
-  // For Impossible mode, move is always local for perfect play, Gemini just provides flavor.
   if (difficulty === 'Impossible') {
     try {
-      // Race the taunt request with a timeout to keep the game snappy
       const tauntPromise = ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `AI move at ${localMove}. Say a 5-word robotic taunt.`,
+        contents: `AI move at ${localMove}. Playing as '${aiPlayer}'. Say a 5-word robotic taunt.`,
         config: {
           responseMimeType: "application/json",
           responseSchema: tauntSchema,
-          thinkingConfig: { thinkingBudget: 0 }, // Disable thinking for minimum latency
+          thinkingConfig: { thinkingBudget: 0 },
         },
       });
 
@@ -67,15 +69,14 @@ export const getAiMove = async (board: SquareValue[], difficulty: Difficulty = '
     }
   }
 
-  // Easy / Hard Modes
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Tic-Tac-Toe 'O'. Board: ${JSON.stringify(board)}. Difficulty: ${difficulty}. Return JSON: {move: index 0-8, taunt: short string}.`,
+      contents: `Tic-Tac-Toe. AI is '${aiPlayer}'. Board: ${JSON.stringify(board)}. Difficulty: ${difficulty}. Return JSON: {move: index 0-8, taunt: short string}.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: moveSchema,
-        thinkingConfig: { thinkingBudget: 0 }, // Fastest response mode
+        thinkingConfig: { thinkingBudget: 0 },
       },
     });
 

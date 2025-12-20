@@ -8,6 +8,7 @@ function App() {
   const [gameMode, setGameMode] = useState<GameMode>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>('Hard');
   const [timeLimit, setTimeLimit] = useState<TimeLimit>(null);
+  const [userPiece, setUserPiece] = useState<Player>('X');
   
   const [board, setBoard] = useState<SquareValue[]>(Array(9).fill(null));
   const [xIsNext, setXIsNext] = useState<boolean>(true);
@@ -24,12 +25,12 @@ function App() {
   const turnTimerRef = useRef<number | null>(null);
 
   const [scores, setScores] = useState<ScoreBoard>(() => {
-    const saved = localStorage.getItem('ttt-scores-v5');
+    const saved = localStorage.getItem('ttt-scores-v7');
     return saved ? JSON.parse(saved) : { X: 0, O: 0, Draws: 0, Total: 0 };
   });
 
   useEffect(() => {
-    localStorage.setItem('ttt-scores-v5', JSON.stringify(scores));
+    localStorage.setItem('ttt-scores-v7', JSON.stringify(scores));
   }, [scores]);
 
   const startNewRound = useCallback(() => {
@@ -41,9 +42,12 @@ function App() {
     setWinner(null);
     setWinningLine(null);
     setAiTaunt("");
+    
+    // Toggle who starts each round
     const nextStart = startingPlayer === 'X' ? 'O' : 'X';
     setStartingPlayer(nextStart);
     setXIsNext(nextStart === 'X');
+    
     setIsAiThinking(false);
     setRemainingTime(timeLimit);
   }, [startingPlayer, timeLimit]);
@@ -109,8 +113,10 @@ function App() {
 
   const handleHumanClick = (i: number) => {
     if (board[i] || winner || isAiThinking) return;
-    if (gameMode === 'PvAI' && !xIsNext) return;
-    executeMove(i, xIsNext ? 'X' : 'O');
+    const currentPlayer = xIsNext ? 'X' : 'O';
+    
+    if (gameMode === 'PvAI' && currentPlayer !== userPiece) return;
+    executeMove(i, currentPlayer);
   };
 
   // Auto-reset logic
@@ -139,14 +145,17 @@ function App() {
   // AI Turn Logic
   useEffect(() => {
     let active = true;
-    if (gameMode === 'PvAI' && !xIsNext && !winner && !isBoardFull(board)) {
+    const aiPiece = userPiece === 'X' ? 'O' : 'X';
+    const currentTurnPiece = xIsNext ? 'X' : 'O';
+
+    if (gameMode === 'PvAI' && currentTurnPiece === aiPiece && !winner && !isBoardFull(board)) {
       const handleAiTurn = async () => {
         setIsAiThinking(true);
         try {
-          const result = await getAiMove(board, difficulty);
+          const result = await getAiMove(board, difficulty, aiPiece);
           if (active && result.move !== undefined && board[result.move] === null) {
             if (result.taunt) setAiTaunt(result.taunt);
-            executeMove(result.move, 'O');
+            executeMove(result.move, aiPiece);
           }
         } catch (e) {
           console.error("AI Move failed", e);
@@ -158,7 +167,7 @@ function App() {
       const timer = setTimeout(handleAiTurn, 150);
       return () => { active = false; clearTimeout(timer); };
     }
-  }, [xIsNext, gameMode, winner, board, difficulty, executeMove]);
+  }, [xIsNext, gameMode, winner, board, difficulty, executeMove, userPiece]);
 
   const quitToMenu = () => {
     if (autoResetTimerRef.current) window.clearInterval(autoResetTimerRef.current);
@@ -173,6 +182,8 @@ function App() {
     setRemainingTime(null);
   };
 
+  const aiPiece = userPiece === 'X' ? 'O' : 'X';
+
   if (!gameMode) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
@@ -186,6 +197,23 @@ function App() {
           </div>
 
           <div className="space-y-4">
+            {/* Piece Selection */}
+            <div className="space-y-2">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Your Piece</p>
+              <div className="bg-white p-1 rounded-xl flex gap-1 border border-slate-200 shadow-sm">
+                {(['X', 'O'] as Player[]).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setUserPiece(p)}
+                    className={`flex-1 py-2 rounded-lg flex items-center justify-center gap-2 transition-all ${userPiece === p ? 'bg-slate-900 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+                  >
+                    <span className="font-black">{p}</span>
+                    {p === 'X' ? <XIcon className="w-3 h-3" /> : <OIcon className="w-3 h-3" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Difficulty Selector */}
             <div className="space-y-2">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Difficulty</p>
@@ -245,7 +273,6 @@ function App() {
     <div className="min-h-screen bg-slate-50 flex flex-col items-center p-4">
       <div className="w-full max-w-sm flex flex-col gap-6">
         
-        {/* Header Stats */}
         <div className="flex items-center justify-between bg-white px-4 py-4 rounded-3xl shadow-sm border border-slate-100">
           <button onClick={quitToMenu} className="p-2 text-slate-300 hover:text-slate-600" title="Back to Menu">
             <HomeIcon className="w-6 h-6" />
@@ -270,10 +297,8 @@ function App() {
           </button>
         </div>
 
-        {/* Board Container */}
         <div className="bg-white p-6 rounded-[3rem] shadow-xl border border-slate-100 relative overflow-hidden">
           
-          {/* Progress Bar Timer */}
           {timeLimit !== null && !winner && (
             <div className="absolute top-0 left-0 w-full h-1.5 bg-slate-100">
               <div 
@@ -288,7 +313,7 @@ function App() {
               <button
                 key={i}
                 onClick={() => handleHumanClick(i)}
-                disabled={!!val || !!winner || (gameMode === 'PvAI' && !xIsNext)}
+                disabled={!!val || !!winner || (gameMode === 'PvAI' && (xIsNext ? 'X' : 'O') !== userPiece)}
                 className={`aspect-square w-full rounded-2xl flex items-center justify-center transition-all border-2 
                   ${val ? 'bg-white border-slate-100' : 'bg-slate-50 border-transparent hover:bg-slate-100'} 
                   ${winningLine?.includes(i) ? 'bg-primary/5 border-primary ring-2 ring-primary/20 scale-105 z-10' : ''}`}
@@ -301,12 +326,17 @@ function App() {
             ))}
           </div>
 
-          {/* Status Message */}
           <div className="mt-8 h-12 flex items-center justify-center text-center">
             {winner ? (
               <div className="flex flex-col items-center gap-1">
-                <div className="bg-slate-900 text-white px-8 py-2 rounded-2xl font-black text-[10px] tracking-widest shadow-lg">
-                  {winner === 'Draw' ? 'STALEMATE' : `${winner} WINS`}
+                <div className={`px-8 py-2 rounded-2xl font-black text-[10px] tracking-widest shadow-lg text-white ${winner === 'X' ? 'bg-primary' : (winner === 'O' ? 'bg-rose-500' : 'bg-slate-900')}`}>
+                  {winner === 'Draw' 
+                    ? 'STALEMATE' 
+                    : (gameMode === 'PvAI' 
+                        ? (winner === userPiece ? 'YOU WIN' : 'YOU LOST')
+                        : `${winner} WINS`
+                      )
+                  }
                 </div>
                 <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
                   Auto-next round in {autoResetCounter}s...
@@ -327,13 +357,15 @@ function App() {
               </div>
             ) : (
               <div className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">
-                {xIsNext ? "Player X's Turn" : (gameMode === 'PvAI' ? "AI's Turn" : "Player O's Turn")}
+                {xIsNext 
+                  ? (gameMode === 'PvAI' && userPiece === 'O' ? "AI is Thinking (X)" : "Player X's Turn")
+                  : (gameMode === 'PvAI' && userPiece === 'X' ? "AI is Thinking (O)" : "Player O's Turn")
+                }
               </div>
             )}
           </div>
         </div>
 
-        {/* Timer Text Indicator */}
         {timeLimit !== null && !winner && (
           <div className="flex justify-center -mt-2">
             <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${remainingTime! <= 1 ? 'text-rose-500' : 'text-slate-400'}`}>
@@ -342,7 +374,6 @@ function App() {
           </div>
         )}
 
-        {/* Footer info */}
         <div className="flex justify-center gap-8 opacity-40">
           <div className="text-center">
             <div className="text-[8px] font-black uppercase tracking-widest">Draws</div>
