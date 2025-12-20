@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { calculateWinner, isBoardFull } from './utils/gameLogic';
 import { getAiMove } from './services/geminiService';
 import { Player, SquareValue, GameMode, ScoreBoard, Difficulty, TimeLimit } from './types';
-import { UserIcon, CpuChipIcon, SparklesIcon, XIcon, OIcon, ArrowPathIcon, HomeIcon } from './components/Icons';
+import { UserIcon, CpuChipIcon, SparklesIcon, XIcon, OIcon, ArrowPathIcon, HomeIcon, GameLogo } from './components/Icons';
 
 function App() {
   const [gameMode, setGameMode] = useState<GameMode>(null);
@@ -188,12 +188,14 @@ function App() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
         <div className="w-full max-w-xs space-y-8 animate-fade-in">
-          <div className="space-y-2">
-            <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center mx-auto text-primary">
-              <SparklesIcon className="w-10 h-10" />
+          <div className="space-y-4">
+            <div className="mx-auto w-32 h-32">
+              <GameLogo className="w-full h-full" />
             </div>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">X & O</h1>
-            <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Neural Edition</p>
+            <div className="space-y-1">
+              <h1 className="text-4xl font-black text-slate-900 tracking-tight">X & O</h1>
+              <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Neural Edition</p>
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -271,7 +273,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center p-4">
-      <div className="w-full max-w-sm flex flex-col gap-6">
+      <div className="w-full max-sm flex flex-col gap-6">
         
         <div className="flex items-center justify-between bg-white px-4 py-4 rounded-3xl shadow-sm border border-slate-100">
           <button onClick={quitToMenu} className="p-2 text-slate-300 hover:text-slate-600" title="Back to Menu">

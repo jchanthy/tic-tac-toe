@@ -1,5 +1,44 @@
 import React from 'react';
 
+export const GameLogo = ({ className }: { className?: string }) => (
+  <div className={`aspect-square bg-black rounded-3xl p-4 flex flex-col relative overflow-hidden shadow-2xl ${className}`}>
+    {/* Grid Lines */}
+    <div className="absolute inset-0 flex flex-col justify-evenly px-4 py-4 pointer-events-none">
+      <div className="h-[2px] w-full bg-[#1E6BCE]"></div>
+      <div className="h-[2px] w-full bg-[#1E6BCE]"></div>
+    </div>
+    <div className="absolute inset-0 flex justify-evenly px-4 py-4 pointer-events-none">
+      <div className="w-[2px] h-full bg-[#1E6BCE]"></div>
+      <div className="w-[2px] h-full bg-[#1E6BCE]"></div>
+    </div>
+    
+    {/* Pieces */}
+    <div className="grid grid-cols-3 grid-rows-3 flex-1 gap-2 relative z-10">
+      <div className="flex items-center justify-center p-1">
+        <XIcon className="w-full h-full text-[#FF0000]" />
+      </div>
+      <div></div>
+      <div className="flex items-center justify-center p-1">
+        <OIcon className="w-full h-full text-[#F9E10E]" />
+      </div>
+      
+      <div></div>
+      <div className="flex items-center justify-center p-1">
+        <OIcon className="w-full h-full text-[#F9E10E]" />
+      </div>
+      <div></div>
+      
+      <div className="flex items-center justify-center p-1">
+        <XIcon className="w-full h-full text-[#FF0000]" />
+      </div>
+      <div></div>
+      <div className="flex items-center justify-center p-1">
+        <OIcon className="w-full h-full text-[#F9E10E]" />
+      </div>
+    </div>
+  </div>
+);
+
 export const UserIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
     <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clipRule="evenodd" />
