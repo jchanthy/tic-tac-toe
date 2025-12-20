@@ -3,6 +3,7 @@ export type SquareValue = Player | null;
 
 export type GameMode = 'PvP' | 'PvAI' | null;
 export type Difficulty = 'Easy' | 'Hard' | 'Impossible';
+export type TimeLimit = null | 3 | 5 | 10;
 
 export interface GameState {
   board: SquareValue[];
@@ -15,6 +16,8 @@ export interface GameState {
 export interface ScoreBoard {
   X: number;
   O: number;
+  Draws: number;
+  Total: number;
 }
 
 export interface AIMoveResponse {
