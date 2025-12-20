@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { calculateWinner, isBoardFull } from './utils/gameLogic';
 import { getAiMove } from './services/geminiService';
-import { Player, SquareValue, GameMode, ScoreBoard, Difficulty, TimeLimit } from './types';
+import { Player, SquareValue, GameMode, ScoreBoard, Difficulty, TimeLimit, MatchDuration } from './types';
 import { UserIcon, CpuChipIcon, SparklesIcon, XIcon, OIcon, ArrowPathIcon, HomeIcon, GameLogo } from './components/Icons';
 
 function App() {
+  // Config States
   const [gameMode, setGameMode] = useState<GameMode>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>('Hard');
-  const [timeLimit, setTimeLimit] = useState<TimeLimit>(null);
+  const [turnTimeLimit, setTurnTimeLimit] = useState<TimeLimit>(null);
+  const [matchDuration, setMatchDuration] = useState<MatchDuration>(null);
   const [userPiece, setUserPiece] = useState<Player>('X');
   
+  // Game States
   const [board, setBoard] = useState<SquareValue[]>(Array(9).fill(null));
   const [xIsNext, setXIsNext] = useState<boolean>(true);
   const [startingPlayer, setStartingPlayer] = useState<Player>('X'); 
@@ -18,19 +21,23 @@ function App() {
   const [isAiThinking, setIsAiThinking] = useState<boolean>(false);
   const [aiTaunt, setAiTaunt] = useState<string>("");
   
-  const [remainingTime, setRemainingTime] = useState<number | null>(null);
+  // Timer States
+  const [remainingTurnTime, setRemainingTurnTime] = useState<number | null>(null);
+  const [matchTimeLeft, setMatchTimeLeft] = useState<number | null>(null);
   const [autoResetCounter, setAutoResetCounter] = useState<number | null>(null);
+  const [isMatchEnded, setIsMatchEnded] = useState<boolean>(false);
   
   const autoResetTimerRef = useRef<number | null>(null);
   const turnTimerRef = useRef<number | null>(null);
+  const matchTimerRef = useRef<number | null>(null);
 
   const [scores, setScores] = useState<ScoreBoard>(() => {
-    const saved = localStorage.getItem('ttt-scores-v7');
+    const saved = localStorage.getItem('ttt-scores-v8');
     return saved ? JSON.parse(saved) : { X: 0, O: 0, Draws: 0, Total: 0 };
   });
 
   useEffect(() => {
-    localStorage.setItem('ttt-scores-v7', JSON.stringify(scores));
+    localStorage.setItem('ttt-scores-v8', JSON.stringify(scores));
   }, [scores]);
 
   const startNewRound = useCallback(() => {
@@ -43,19 +50,22 @@ function App() {
     setWinningLine(null);
     setAiTaunt("");
     
-    // Toggle who starts each round
     const nextStart = startingPlayer === 'X' ? 'O' : 'X';
     setStartingPlayer(nextStart);
     setXIsNext(nextStart === 'X');
     
     setIsAiThinking(false);
-    setRemainingTime(timeLimit);
-  }, [startingPlayer, timeLimit]);
+    setRemainingTurnTime(turnTimeLimit);
+  }, [startingPlayer, turnTimeLimit]);
 
   const manualFullReset = useCallback(() => {
+    if (matchDuration) {
+      setMatchTimeLeft(matchDuration * 60);
+      setIsMatchEnded(false);
+    }
     startNewRound();
     setScores({ X: 0, O: 0, Draws: 0, Total: 0 });
-  }, [startNewRound]);
+  }, [startNewRound, matchDuration]);
 
   const handleTimeout = useCallback(() => {
     const loser = xIsNext ? 'X' : 'O';
@@ -67,6 +77,7 @@ function App() {
 
   const executeMove = useCallback((index: number, player: Player) => {
     if (turnTimerRef.current) window.clearInterval(turnTimerRef.current);
+    if (isMatchEnded) return;
     
     setBoard(prevBoard => {
       if (prevBoard[index] !== null || winner) return prevBoard;
@@ -84,18 +95,37 @@ function App() {
         setScores(s => ({ ...s, Draws: s.Draws + 1, Total: s.Total + 1 }));
       } else {
         setXIsNext(p => !p);
-        setRemainingTime(timeLimit);
+        setRemainingTurnTime(turnTimeLimit);
       }
       
       return nextBoard;
     });
-  }, [winner, timeLimit]);
+  }, [winner, turnTimeLimit, isMatchEnded]);
+
+  // Global Match Timer Logic
+  useEffect(() => {
+    if (gameMode && matchDuration && matchTimeLeft !== null && matchTimeLeft > 0 && !isMatchEnded) {
+      matchTimerRef.current = window.setInterval(() => {
+        setMatchTimeLeft(prev => {
+          if (prev !== null && prev <= 1) {
+            window.clearInterval(matchTimerRef.current!);
+            setIsMatchEnded(true);
+            return 0;
+          }
+          return prev !== null ? prev - 1 : null;
+        });
+      }, 1000);
+      return () => {
+        if (matchTimerRef.current) window.clearInterval(matchTimerRef.current);
+      };
+    }
+  }, [gameMode, matchDuration, isMatchEnded]);
 
   // Turn Timer Logic
   useEffect(() => {
-    if (gameMode && !winner && timeLimit !== null && remainingTime !== null) {
+    if (gameMode && !winner && turnTimeLimit !== null && remainingTurnTime !== null && !isMatchEnded) {
       turnTimerRef.current = window.setInterval(() => {
-        setRemainingTime(prev => {
+        setRemainingTurnTime(prev => {
           if (prev === null) return null;
           if (prev <= 1) {
             window.clearInterval(turnTimerRef.current!);
@@ -109,21 +139,19 @@ function App() {
         if (turnTimerRef.current) window.clearInterval(turnTimerRef.current);
       };
     }
-  }, [xIsNext, winner, gameMode, timeLimit, remainingTime, handleTimeout]);
+  }, [xIsNext, winner, gameMode, turnTimeLimit, remainingTurnTime, handleTimeout, isMatchEnded]);
 
   const handleHumanClick = (i: number) => {
-    if (board[i] || winner || isAiThinking) return;
+    if (board[i] || winner || isAiThinking || isMatchEnded) return;
     const currentPlayer = xIsNext ? 'X' : 'O';
-    
     if (gameMode === 'PvAI' && currentPlayer !== userPiece) return;
     executeMove(i, currentPlayer);
   };
 
   // Auto-reset logic
   useEffect(() => {
-    if (winner) {
+    if (winner && !isMatchEnded) {
       if (turnTimerRef.current) window.clearInterval(turnTimerRef.current);
-      // User requested 2s instead of 3s
       const COUNTDOWN_START = 2;
       setAutoResetCounter(COUNTDOWN_START);
       
@@ -141,7 +169,7 @@ function App() {
         if (autoResetTimerRef.current) window.clearInterval(autoResetTimerRef.current);
       };
     }
-  }, [winner, startNewRound]);
+  }, [winner, startNewRound, isMatchEnded]);
 
   // AI Turn Logic
   useEffect(() => {
@@ -149,7 +177,7 @@ function App() {
     const aiPiece = userPiece === 'X' ? 'O' : 'X';
     const currentTurnPiece = xIsNext ? 'X' : 'O';
 
-    if (gameMode === 'PvAI' && currentTurnPiece === aiPiece && !winner && !isBoardFull(board)) {
+    if (gameMode === 'PvAI' && currentTurnPiece === aiPiece && !winner && !isBoardFull(board) && !isMatchEnded) {
       const handleAiTurn = async () => {
         setIsAiThinking(true);
         try {
@@ -168,11 +196,12 @@ function App() {
       const timer = setTimeout(handleAiTurn, 150);
       return () => { active = false; clearTimeout(timer); };
     }
-  }, [xIsNext, gameMode, winner, board, difficulty, executeMove, userPiece]);
+  }, [xIsNext, gameMode, winner, board, difficulty, executeMove, userPiece, isMatchEnded]);
 
   const quitToMenu = () => {
     if (autoResetTimerRef.current) window.clearInterval(autoResetTimerRef.current);
     if (turnTimerRef.current) window.clearInterval(turnTimerRef.current);
+    if (matchTimerRef.current) window.clearInterval(matchTimerRef.current);
     setGameMode(null);
     setBoard(Array(9).fill(null));
     setWinner(null);
@@ -180,15 +209,23 @@ function App() {
     setXIsNext(true);
     setIsAiThinking(false);
     setAutoResetCounter(null);
-    setRemainingTime(null);
+    setRemainingTurnTime(null);
+    setMatchTimeLeft(null);
+    setIsMatchEnded(false);
+  };
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
   if (!gameMode) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-full max-w-[320px] space-y-6 animate-fade-in">
+        <div className="w-full max-w-[320px] space-y-5 animate-fade-in overflow-y-auto max-h-screen hide-scrollbar py-4">
           <div className="space-y-4">
-            <div className="mx-auto w-24 h-24">
+            <div className="mx-auto w-20 h-20">
               <GameLogo className="w-full h-full" />
             </div>
             <div className="space-y-1">
@@ -229,34 +266,58 @@ function App() {
               </div>
             </div>
 
-            <div className="space-y-2 text-left">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Turn Timer</p>
-              <div className="bg-white p-1 rounded-xl flex gap-1 border border-slate-200 shadow-sm">
-                {[null, 3, 5, 10].map((t) => (
-                  <button
-                    key={String(t)}
-                    onClick={() => setTimeLimit(t as TimeLimit)}
-                    className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${timeLimit === t ? 'bg-rose-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
-                  >
-                    {t === null ? 'Off' : `${t}s`}
-                  </button>
-                ))}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2 text-left">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Turn</p>
+                <div className="bg-white p-1 rounded-xl flex flex-wrap gap-1 border border-slate-200 shadow-sm">
+                  {[null, 3, 5].map((t) => (
+                    <button
+                      key={String(t)}
+                      onClick={() => setTurnTimeLimit(t as TimeLimit)}
+                      className={`flex-1 py-1.5 px-2 rounded-lg text-[9px] font-black uppercase transition-all ${turnTimeLimit === t ? 'bg-rose-500 text-white' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      {t === null ? '∞' : `${t}s`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2 text-left">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 text-primary">Match Duration</p>
+                <div className="bg-white p-1 rounded-xl flex flex-wrap gap-1 border border-slate-200 shadow-sm">
+                  {[null, 1, 3, 5].map((m) => (
+                    <button
+                      key={String(m)}
+                      onClick={() => setMatchDuration(m as MatchDuration)}
+                      className={`flex-1 py-1.5 px-2 rounded-lg text-[9px] font-black uppercase transition-all ${matchDuration === m ? 'bg-primary text-white' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      {m === null ? 'Single' : `${m}m`}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
             <button
-              onClick={() => { setGameMode('PvAI'); setRemainingTime(timeLimit); }}
+              onClick={() => { 
+                setGameMode('PvAI'); 
+                setRemainingTurnTime(turnTimeLimit); 
+                if (matchDuration) setMatchTimeLeft(matchDuration * 60);
+              }}
               className="w-full group p-4 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 transition-all active:scale-95 shadow-lg flex flex-col items-center gap-1"
             >
-              <CpuChipIcon className="w-6 h-6 text-rose-400" />
+              <CpuChipIcon className="w-5 h-5 text-rose-400" />
               <div className="text-base font-bold">Vs. Machine</div>
             </button>
 
             <button
-              onClick={() => { setGameMode('PvP'); setRemainingTime(timeLimit); }}
+              onClick={() => { 
+                setGameMode('PvP'); 
+                setRemainingTurnTime(turnTimeLimit); 
+                if (matchDuration) setMatchTimeLeft(matchDuration * 60);
+              }}
               className="w-full group p-4 bg-white border border-slate-100 rounded-2xl hover:border-primary/30 transition-all active:scale-95 shadow-sm flex flex-col items-center gap-1"
             >
-              <UserIcon className="w-6 h-6 text-slate-400 group-hover:text-primary transition-colors" />
+              <UserIcon className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
               <div className="text-base font-bold text-slate-700">Vs. Human</div>
             </button>
           </div>
@@ -265,10 +326,22 @@ function App() {
     );
   }
 
+  const matchWinner = scores.X > scores.O ? 'X' : scores.O > scores.X ? 'O' : 'Draw';
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center p-4">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center p-4 hide-scrollbar">
       <div className="w-full max-w-[280px] flex flex-col gap-4">
         
+        {/* Match Timer */}
+        {matchDuration && matchTimeLeft !== null && (
+          <div className="bg-slate-900 text-white px-4 py-2 rounded-2xl flex items-center justify-between shadow-lg">
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Match Time</span>
+            <span className={`font-mono font-black text-lg ${matchTimeLeft <= 10 ? 'text-rose-500 animate-pulse' : 'text-primary'}`}>
+              {formatTime(matchTimeLeft)}
+            </span>
+          </div>
+        )}
+
         <div className="flex items-center justify-between bg-white px-3 py-3 rounded-2xl shadow-sm border border-slate-100">
           <button onClick={quitToMenu} className="p-1.5 text-slate-300 hover:text-slate-600" title="Back to Menu">
             <HomeIcon className="w-5 h-5" />
@@ -286,18 +359,18 @@ function App() {
             </div>
           </div>
 
-          <button onClick={manualFullReset} className="p-1.5 text-slate-300 hover:text-slate-600" title="Reset Game & Scores">
+          <button onClick={manualFullReset} className="p-1.5 text-slate-300 hover:text-slate-600" title="Reset Match">
             <ArrowPathIcon className="w-5 h-5" />
           </button>
         </div>
 
         <div className="bg-white p-4 rounded-[2rem] shadow-xl border border-slate-100 relative overflow-hidden">
           
-          {timeLimit !== null && !winner && (
+          {turnTimeLimit !== null && !winner && !isMatchEnded && (
             <div className="absolute top-0 left-0 w-full h-1 bg-slate-100">
               <div 
-                className={`h-full transition-all duration-1000 ease-linear ${remainingTime && remainingTime <= 1 ? 'bg-rose-500 animate-pulse' : 'bg-primary'}`}
-                style={{ width: `${(remainingTime! / timeLimit) * 100}%` }}
+                className={`h-full transition-all duration-1000 ease-linear ${remainingTurnTime && remainingTurnTime <= 1 ? 'bg-rose-500 animate-pulse' : 'bg-primary'}`}
+                style={{ width: `${(remainingTurnTime! / turnTimeLimit) * 100}%` }}
               />
             </div>
           )}
@@ -307,7 +380,7 @@ function App() {
               <button
                 key={i}
                 onClick={() => handleHumanClick(i)}
-                disabled={!!val || !!winner || (gameMode === 'PvAI' && (xIsNext ? 'X' : 'O') !== userPiece)}
+                disabled={!!val || !!winner || (gameMode === 'PvAI' && (xIsNext ? 'X' : 'O') !== userPiece) || isMatchEnded}
                 className={`aspect-square w-full rounded-xl flex items-center justify-center transition-all border-2 
                   ${val ? 'bg-white border-slate-100' : 'bg-slate-50 border-transparent hover:bg-slate-100'} 
                   ${winningLine?.includes(i) ? 'bg-primary/5 border-primary ring-1 ring-primary/20 scale-105 z-10' : ''}`}
@@ -321,7 +394,11 @@ function App() {
           </div>
 
           <div className="mt-4 h-10 flex items-center justify-center text-center">
-            {winner ? (
+            {isMatchEnded ? (
+              <div className="text-[9px] font-black text-primary uppercase tracking-widest">
+                MATCH OVER
+              </div>
+            ) : winner ? (
               <div className="flex flex-col items-center">
                 <div className={`px-4 py-1 rounded-xl font-black text-[9px] tracking-widest shadow text-white ${winner === 'X' ? 'bg-primary' : (winner === 'O' ? 'bg-rose-500' : 'bg-slate-900')}`}>
                   {winner === 'Draw' 
@@ -332,16 +409,18 @@ function App() {
                       )
                   }
                 </div>
-                <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">
-                  Next round in {autoResetCounter}s
-                </div>
+                {!isMatchEnded && (
+                  <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                    Next round in {autoResetCounter}s
+                  </div>
+                )}
               </div>
             ) : isAiThinking ? (
               <div className="flex items-center gap-1.5 text-[9px] font-black text-rose-500 uppercase tracking-widest">
                 <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></div>
                 Analyzing...
               </div>
-            ) : (remainingTime !== null && remainingTime <= 1 && timeLimit !== null) ? (
+            ) : (remainingTurnTime !== null && remainingTurnTime <= 1 && turnTimeLimit !== null) ? (
               <div className="text-[9px] font-black text-rose-500 uppercase tracking-widest animate-pulse">
                 Hurry!
               </div>
@@ -360,10 +439,10 @@ function App() {
           </div>
         </div>
 
-        {timeLimit !== null && !winner && (
+        {turnTimeLimit !== null && !winner && !isMatchEnded && (
           <div className="flex justify-center -mt-1">
-            <span className={`text-[9px] font-black uppercase tracking-[0.1em] ${remainingTime! <= 1 ? 'text-rose-500' : 'text-slate-400'}`}>
-              Time: {remainingTime}s
+            <span className={`text-[9px] font-black uppercase tracking-[0.1em] ${remainingTurnTime! <= 1 ? 'text-rose-500' : 'text-slate-400'}`}>
+              Turn: {remainingTurnTime}s
             </span>
           </div>
         )}
@@ -374,12 +453,54 @@ function App() {
             <div className="font-bold text-[10px]">{scores.Draws}</div>
           </div>
           <div className="text-center">
-            <div className="text-[7px] font-black uppercase tracking-widest">Total</div>
+            <div className="text-[7px] font-black uppercase tracking-widest">Total Rounds</div>
             <div className="font-bold text-[10px]">{scores.Total}</div>
           </div>
         </div>
 
       </div>
+
+      {/* Match Result Overlay */}
+      {isMatchEnded && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-fade-in">
+          <div className="bg-white w-full max-w-[300px] rounded-[3rem] p-8 text-center shadow-2xl space-y-6">
+            <div className="space-y-2">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Match Summary</p>
+              <h2 className="text-3xl font-black text-slate-900">
+                {matchWinner === 'Draw' ? "TIE MATCH!" : `${matchWinner} VICTORIOUS!`}
+              </h2>
+            </div>
+            
+            <div className="flex items-center justify-center gap-8 py-4 bg-slate-50 rounded-3xl">
+              <div className="flex flex-col items-center">
+                <span className="text-xs font-black text-primary mb-1">X</span>
+                <span className="text-3xl font-black text-slate-900">{scores.X}</span>
+              </div>
+              <div className="text-slate-300 text-xl font-bold">:</div>
+              <div className="flex flex-col items-center">
+                <span className="text-xs font-black text-rose-500 mb-1">O</span>
+                <span className="text-3xl font-black text-slate-900">{scores.O}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <button 
+                onClick={manualFullReset}
+                className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all active:scale-95 shadow-xl flex items-center justify-center gap-2"
+              >
+                <ArrowPathIcon className="w-5 h-5 text-primary" />
+                REMATCH
+              </button>
+              <button 
+                onClick={quitToMenu}
+                className="w-full bg-white border border-slate-100 text-slate-400 font-black py-4 rounded-2xl hover:text-slate-900 transition-all"
+              >
+                BACK TO MENU
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
